@@ -32,7 +32,6 @@
 
 #define UART_BAUD_RATE     38400
 
-
 static void __attribute__((constructor)) 
 uart_constructor(void) {
   uart_init(UART_BAUD_SELECT(UART_BAUD_RATE,XTAL));
@@ -48,8 +47,6 @@ uart_constructor(void) {
 #define PORT_UNI_PHASE_A2 &PORTC, PC1
 #define PORT_UNI_PHASE_B1 &PORTC, PC2
 #define PORT_UNI_PHASE_B2 &PORTC, PC3
-
-
 
 static void set_phase(uint8_t phase, uint8_t value) {
   if ( phase == PHASE_A ) xpin2 ( value,  PORT_BIP_PHASE_A );
@@ -189,18 +186,11 @@ SIGNAL (SIG_OVERFLOW0)
   rc5_tmp = tmp;
 }
 
-static volatile uint8_t counter = 0;
-
-ISR(INT0_vect) {
-  counter ++;
-}
-
 
 int main(void)
 {
 
   uint i;
-  char s[30];
   _delay_ms(100);
 
   // init section -------------------------------------
@@ -208,21 +198,8 @@ int main(void)
   TCCR0 = 1<<CS02;			//divide by 256
   TIMSK = 1<<TOIE0;			//enable timer interrupt
 
-
   DDRC |= 0x0f;
   DDRD &= ~_BV(PD7);
-
-  // internal pullup seems NOT to work 
-  //  PORTD |= _BV(PD2);
-
-  //  PORTD &= ~_BV(PD2);
-
-  // The rising edge of INT0 generates an interrupt request.  
-  // enable external interrupt 0
-
-  //  MCUCR |= ~_BV(ISC01) | _BV(ISC00);
-  //  GICR  |= _BV(INT0);                   
-
   DDRB = 0x03;
   PORTC &= 0xf0;
   uni_step_backward();  uni_step_backward();
@@ -233,49 +210,29 @@ int main(void)
   /* main loop section ---------------------------------- */
 
   for(;;) {
-#if 0
-	if ( i < 100 ) uni_step_forward();
-	else if (i < 200) uni_step_backward();
-	else i = 0;
-#elif 0
-	if (counter > 0) {
-	  _delay_ms(100);
-	  for (i = 0; i< counter; i++ ) {
-		//34
-		step_forward();
-		_delay_ms(500);
-	  }
 
-	  counter = 0;
-	}
-#else 
     cli();
     i = rc5_data;			// read two bytes from interrupt !
     rc5_data = 0;
     sei();
     if( i ){
-	  uint device = i >> 6 & 0x1F;
+	  //	  uint device = i >> 6 & 0x1F;
 	  uint code = (i & 0x3F) | (~i >> 7 & 0x40);
-      itoa( i >> 6 & 0x1F, s, 10);	// Device address
-      itoa((i & 0x3F) | (~i >> 7 & 0x40), s, 10); // Key Code
 	  
-
 	  // VOLUP
 	  if ( code == 16 ) uni_step_forward();
+
+	  // VOLDOWN
 	  else if ( code == 17 ) uni_step_backward();
-	  
-	  
+
+	  // unpower stepper
 	  clearpin2(PORT_UNI_PHASE_A1);
 	  clearpin2(PORT_UNI_PHASE_A2);
 	  clearpin2(PORT_UNI_PHASE_B1);
 	  clearpin2(PORT_UNI_PHASE_B2);
 
     }
-
-	
-#endif
   }
-
 }
 
 

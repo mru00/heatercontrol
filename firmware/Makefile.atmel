@@ -48,7 +48,7 @@
 FORMAT = ihex
 
 # Target file name (without extension).
-TARGET = terrarium
+TARGET = ir_stepper
 
 
 # List Assembler source files here.
