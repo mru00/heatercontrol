@@ -26,9 +26,7 @@ MCU = atmega8
 MCU_DUDE = m8
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = main.c  uart.c #time.c timeswitch.c portmap.c \
-#	i2c.c ds1307.c eeprom.c hd4478.c commandline.c selftest.c \
-#	sht11.c itoa.c pcf8574a.c
+SRC = main.c  uart.c #portmap.c 
 
 RELEASE_DIR = ../releases
 BUILD_ID_FILE = build-id.h
@@ -60,7 +58,8 @@ increase_build_number:
 	@touch $(BUILD_ID_FILE)
 	@echo "#define BUILD_ID \"$$(( $(BUILD) + 1 ))\"" > $(BUILD_ID_FILE)
 	@echo
-	@echo " new build number: " $$(( $(BUILD) + 1))
+	@echo " | new build number: " $$(( $(BUILD) + 1))
+	@echo " |====================== "
 
 find_dummy:
 	@$(call GET_DEFINES) > /dev/null
@@ -82,6 +81,5 @@ FUSE_H = 0xc9
 #CFLAGS += -Werror
 
 -include Makefile.atmel
-
 
 .PHONY: profile_size erase_flash release get_defines

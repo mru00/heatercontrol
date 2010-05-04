@@ -1,8 +1,8 @@
 /* 
- * terrarium control
- * mru, november 2009
+ * ir stepper
+ * mru, may 2010
  *
- * serial commandline interface
+ * 
  */
 
 
