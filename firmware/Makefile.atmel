@@ -48,7 +48,7 @@
 FORMAT = ihex
 
 # Target file name (without extension).
-TARGET = ir_stepper
+TARGET = heater_control
 
 
 # List Assembler source files here.
@@ -132,8 +132,7 @@ PRINTF_LIB_MIN = -Wl,-u,vfprintf -lprintf_min
 # Floating point printf version (requires MATH_LIB = -lm below)
 PRINTF_LIB_FLOAT = -Wl,-u,vfprintf -lprintf_flt
 
-PRINTF_LIB = 
-#$(PRINTF_LIB_FLOAT)
+PRINTF_LIB = #$(PRINTF_LIB_MIN)
 
 # Minimalistic scanf version
 SCANF_LIB_MIN =
@@ -145,8 +144,7 @@ SCANF_LIB_FLOAT =
 
 SCANF_LIB = 
 
-MATH_LIB = 
-#-lm
+MATH_LIB = #-lm
 
 # External memory options
 
@@ -334,6 +332,15 @@ set_fuses: $(TARGET).hex $(TARGET).eep
 	$(UISP) $(UISP_FLAGS) --wr_fuse_h=$(FUSE_H)
 #	echo $(UISP) $(UISP_FLAGS) --wr_fuse_e=0xff
 
+
+
+set_fuses_12mhz_xtal: $(TARGET).hex $(TARGET).eep
+	$(UISP) $(UISP_FLAGS) --wr_fuse_l=0xef
+	$(UISP) $(UISP_FLAGS) --wr_fuse_h=0xc9
+#	echo $(UISP) $(UISP_FLAGS) --wr_fuse_e=0xff
+
+read_fuses:
+	$(UISP) $(UISP_FLAGS) --rd_fuses	
 
 # Program the device.  
 program: $(TARGET).hex $(TARGET).eep sizeafter

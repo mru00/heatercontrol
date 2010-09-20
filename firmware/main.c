@@ -1,22 +1,22 @@
 /************************************************************************
- * This file is part of TerraControl.								    *
- * 																	    *
- * TerraControl is free software; you can redistribute it and/or modify *
+ * This file is part of HeaterControl.                                  *
+ *                                                                      *
+ * HeaterControl is free software; you can redistribute it and/or modify *
  * it under the terms of the GNU General Public License as published    *
  * by the Free Software Foundation; either version 2 of the License, or *
- * (at your option) any later version.								    *
- * 																	    *
- * TerraControl is distributed in the hope that it will be useful,	    *
- * but WITHOUT ANY WARRANTY; without even the implied warranty of	    *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the	    *
- * GNU General Public License for more details.						    *
- * 																	    *
+ * (at your option) any later version.                                  *
+ *                                                                      *
+ * HeaterControl is distributed in the hope that it will be useful,     *
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of       *
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the        *
+ * GNU General Public License for more details.                         *
+ *                                                                      *
  * You should have received a copy of the GNU General Public License    *
- * along with TerraControl; if not, write to the Free Software		    *
+ * along with HeaterControl; if not, write to the Free Software         *
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 *
- * USA																    *
- * Written and (c) by mru											    *
- * Contact <mru@sisyphus.teil.cc> for comment & bug reports				*
+ * USA                                                                  *
+ * Written and (c) by mru                                               *
+ * Contact <mru@sisyphus.teil.cc> for comment & bug reports             *
  ************************************************************************/
 
 #include <avr/io.h>
@@ -25,213 +25,150 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #include <avr/pgmspace.h>
-
+#include <stdio.h>
 #include <stdlib.h>
+#include "pid.h"
 
 #include "common.h"
 
 #define UART_BAUD_RATE     38400
 
-static void __attribute__((constructor)) 
+static void __attribute__((constructor))
 uart_constructor(void) {
   uart_init(UART_BAUD_SELECT(UART_BAUD_RATE,XTAL));
 }
 
-#define PHASE_A 0
-#define PHASE_B 1
 
-#define PORT_BIP_PHASE_A &PORTB, PB0
-#define PORT_BIP_PHASE_B &PORTB, PB1
+#define K_P     1.00f
+#define K_I     0.01f
+#define K_D     0.00f
 
-#define PORT_UNI_PHASE_A1 &PORTC, PC0
-#define PORT_UNI_PHASE_A2 &PORTC, PC1
-#define PORT_UNI_PHASE_B1 &PORTC, PC2
-#define PORT_UNI_PHASE_B2 &PORTC, PC3
+static struct PID_DATA pidData;
 
-static void set_phase(uint8_t phase, uint8_t value) {
-  if ( phase == PHASE_A ) xpin2 ( value,  PORT_BIP_PHASE_A );
-  else 	xpin2 ( value,  PORT_BIP_PHASE_B );
+static const float fir_temp_coeffs[] = { 1./12., 1./12., 1./12.,
+										 1./12., 1./12., 1./12.,
+										 1./12., 1./12., 1./12.,
+										 1./12., 1./12., 1./12.};
+
+static float fir_push(const float xn,
+					  float *buffer,
+					  int *pos,
+                     const float *coeff,
+                     const int count)
+{
+  float yn = 0.0f;
+  int i =0;
+
+  *pos = (*pos + 1) % count;
+  *(buffer + *pos) = xn;
+  for (i = 0; i < count; i++) 
+	yn += *(buffer+((i+*pos)%count)) * *(coeff + ((i+*pos)%count));
+  return yn;
 }
 
 
-static void bip_sleep_phase(void) {
-  _delay_ms(4);
-}
-
-static void uni_sleep_phase(void) {
-  _delay_ms(20);
-}
-
-static void bip_step_forward(void) {
-  set_phase(PHASE_A, 0);  bip_sleep_phase();
-  set_phase(PHASE_B, 0);  bip_sleep_phase();
-  set_phase(PHASE_A, 1);  bip_sleep_phase();
-  set_phase(PHASE_B, 1);  bip_sleep_phase();
-}
-
-static void bip_step_backward(void) {
-  set_phase(PHASE_B, 0);  bip_sleep_phase();
-  set_phase(PHASE_A, 0);  bip_sleep_phase();
-  set_phase(PHASE_B, 1);  bip_sleep_phase();
-  set_phase(PHASE_A, 1);  bip_sleep_phase();
-}
-
-
-static void uni_step_forward(void) {
-
-  clearpin2(PORT_UNI_PHASE_A2);
-  clearpin2(PORT_UNI_PHASE_B1);
-  setpin2(PORT_UNI_PHASE_A1);
-  setpin2(PORT_UNI_PHASE_B2);
-  uni_sleep_phase();
-
-  clearpin2(PORT_UNI_PHASE_A2);
-  clearpin2(PORT_UNI_PHASE_B2);
-  setpin2(PORT_UNI_PHASE_A1);
-  setpin2(PORT_UNI_PHASE_B1);
-  uni_sleep_phase();
-
-  clearpin2(PORT_UNI_PHASE_A1);
-  clearpin2(PORT_UNI_PHASE_B2);
-  setpin2(PORT_UNI_PHASE_A2);
-  setpin2(PORT_UNI_PHASE_B1);
-  uni_sleep_phase();
-
-  clearpin2(PORT_UNI_PHASE_A1);
-  clearpin2(PORT_UNI_PHASE_B1);
-  setpin2(PORT_UNI_PHASE_A2);
-  setpin2(PORT_UNI_PHASE_B2);
-  uni_sleep_phase();
-
-  
-}
-
-static void uni_step_backward(void) {
-
-  clearpin2(PORT_UNI_PHASE_A1);
-  clearpin2(PORT_UNI_PHASE_B1);
-  setpin2(PORT_UNI_PHASE_A2);
-  setpin2(PORT_UNI_PHASE_B2);
-  uni_sleep_phase();
-
-
-  clearpin2(PORT_UNI_PHASE_A1);
-  clearpin2(PORT_UNI_PHASE_B2);
-  setpin2(PORT_UNI_PHASE_A2);
-  setpin2(PORT_UNI_PHASE_B1);
-  uni_sleep_phase();
-
-
-
-  clearpin2(PORT_UNI_PHASE_A2);
-  clearpin2(PORT_UNI_PHASE_B2);
-  setpin2(PORT_UNI_PHASE_A1);
-  setpin2(PORT_UNI_PHASE_B1);
-  uni_sleep_phase();
-
-  clearpin2(PORT_UNI_PHASE_A2);
-  clearpin2(PORT_UNI_PHASE_B1);
-  setpin2(PORT_UNI_PHASE_A1);
-  setpin2(PORT_UNI_PHASE_B2);
-  uni_sleep_phase();
-
-}
 
 #define uchar unsigned char
 #define uint unsigned int
 
-#define	xRC5_IN		PIND
-#define	xRC5		PD7			// IR input low active
+static float last_temp_abgas[12];
+static float last_temp_vorlauf[12];
+static int temp_abgas_pos=0;
+static int temp_vorlauf_pos=0;
 
 
-#define RC5TIME 	1.778e-3		// 1.778msec
-#define PULSE_MIN	(uchar)(XTAL / 512 * RC5TIME * 0.4 + 0.5)
-#define PULSE_1_2	(uchar)(XTAL / 512 * RC5TIME * 0.8 + 0.5)
-#define PULSE_MAX	(uchar)(XTAL / 512 * RC5TIME * 1.2 + 0.5)
+static float calc_temp_abgas(uint16_t ambient_temp) {
+  uint16_t adc_value;
+  float volt;
+  float temp;
 
+  const float v_1190_deg = 69.553e-3;
+  const float v_0_deg = 0.0;
+  const float k = (1190.0-0.0)/(v_1190_deg-v_0_deg);
 
-volatile uchar	rc5_bit;				// bit value
-volatile uchar	rc5_time;				// count bit time
-volatile uint	rc5_tmp;				// shift bits in
-volatile uint	rc5_data;				// store result
+  const float amp_gain = 50.0;
 
+  adc_select_channel(0);
+  adc_single_conversion(&adc_value);
+  adc_result2volt(adc_value, &volt, 2.54);
 
-SIGNAL (SIG_OVERFLOW0)
-{
-  uint tmp = rc5_tmp;				// for faster access
+  temp = volt * k;
+  temp /= amp_gain;
+  temp += ambient_temp;
 
-  TCNT0 = -2;					// 2 * 256 = 512 cycle
-
-  if( ++rc5_time > PULSE_MAX ){			// count pulse time
-    if( !(tmp & 0x4000) && tmp & 0x2000 )	// only if 14 bits received
-      rc5_data = tmp;
-    tmp = 0;
-  }
-
-  if( (rc5_bit ^ xRC5_IN) & 1<<xRC5 ){		// change detect
-    rc5_bit = ~rc5_bit;				// 0x00 -> 0xFF -> 0x00
-
-    if( rc5_time < PULSE_MIN )			// to short
-      tmp = 0;
-
-    if( !tmp || rc5_time > PULSE_1_2 ){		// start or long pulse time
-      if( !(tmp & 0x4000) )			// not to many bits
-        tmp <<= 1;				// shift
-      if( !(rc5_bit & 1<<xRC5) )		// inverted bit
-        tmp |= 1;				// insert new bit
-      rc5_time = 0;				// count next pulse time
-    }
-  }
-
-  rc5_tmp = tmp;
+  return fir_push(temp, last_temp_abgas, &temp_abgas_pos, fir_temp_coeffs, 12);
 }
 
 
+static float calc_temp_vorlauf(uint16_t ambient_temp) {
+  uint16_t adc_value;
+  float volt;
+  float temp;
+
+  const float v_1190_deg = 69.553e-3;
+  const float v_0_deg = 0.0;
+  const float k = (1190.0-0.0)/(v_1190_deg-v_0_deg);
+
+  const float amp_gain = 50.0;
+
+  adc_select_channel(1);
+  adc_single_conversion(&adc_value);
+  adc_result2volt(adc_value, &volt, 2.56f);
+
+  temp = volt * k;
+  temp /= amp_gain;
+  temp += ambient_temp;
+
+  return fir_push(temp, last_temp_vorlauf, &temp_vorlauf_pos, fir_temp_coeffs, 12);
+}
+
 int main(void)
 {
+  char str_val[100];
 
-  uint i;
   _delay_ms(100);
 
   // init section -------------------------------------
 
-  TCCR0 = 1<<CS02;			//divide by 256
-  TIMSK = 1<<TOIE0;			//enable timer interrupt
+  DDRC = 0;
+  PORTC = 0x00;
 
-  DDRC |= 0x0f;
   DDRD &= ~_BV(PD7);
-  DDRB = 0x03;
-  PORTC &= 0xf0;
-  uni_step_backward();  uni_step_backward();
+  DDRD |= _BV(PD6);
+  PORTD |= _BV(PD7);
 
-  uni_step_forward();
+  DDRB = 0x07;
 
+  uart_puts("hello from heater-control\n");
+  adc_init();
+  ln5623_init();
+  pid_init(K_P * SCALING_FACTOR, 
+		   K_I * SCALING_FACTOR, 
+		   K_D * SCALING_FACTOR, 
+		   &pidData);
+  
   sei();
   /* main loop section ---------------------------------- */
 
   for(;;) {
+	unsigned int recv = uart_getc();
 
-    cli();
-    i = rc5_data;			// read two bytes from interrupt !
-    rc5_data = 0;
-    sei();
-    if( i ){
-	  //	  uint device = i >> 6 & 0x1F;
-	  uint code = (i & 0x3F) | (~i >> 7 & 0x40);
-	  
-	  // VOLUP
-	  if ( code == 16 ) uni_step_forward();
+	if ( (recv & UART_NO_DATA) == 0  ) {
+	  receive(recv & 0xff);
+	}
 
-	  // VOLDOWN
-	  else if ( code == 17 ) uni_step_backward();
+	const uint16_t ambient_temp = 25;
+    uint16_t temp_vorlauf = (int)calc_temp_vorlauf(ambient_temp);
+    uint16_t temp_abgas = (int)calc_temp_abgas(ambient_temp);
 
-	  // unpower stepper
-	  clearpin2(PORT_UNI_PHASE_A1);
-	  clearpin2(PORT_UNI_PHASE_A2);
-	  clearpin2(PORT_UNI_PHASE_B1);
-	  clearpin2(PORT_UNI_PHASE_B2);
+	int16_t inputValue = pid_controller(temp_vorlauf, 80, &pidData);
 
-    }
+    set_temp_vorlauf(temp_vorlauf);
+    set_temp_abgas(temp_abgas);
+
+
+    ln5623_set_output(temp_vorlauf, 0);
+    _delay_ms(50);
   }
 }
 

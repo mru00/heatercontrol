@@ -1,18 +1,18 @@
 ########################################################################
-# This file is part of TerraControl.								   #
+# This file is part of HeaterControl.								   #
 # 																	   #
-# TerraControl is free software; you can redistribute it and/or modify #
+# HeaterControl is free software; you can redistribute it and/or modify #
 # it under the terms of the GNU General Public License as published	   #
 # by the Free Software Foundation; either version 2 of the License, or #
 # (at your option) any later version.								   #
 # 																	   #
-# TerraControl is distributed in the hope that it will be useful,	   #
+# HeaterControl is distributed in the hope that it will be useful,	   #
 # but WITHOUT ANY WARRANTY; without even the implied warranty of	   #
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the		   #
 # GNU General Public License for more details.						   #
 # 																	   #
 # You should have received a copy of the GNU General Public License	   #
-# along with TerraControl; if not, write to the Free Software		   #
+# along with HeaterControl; if not, write to the Free Software		   #
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 #
 # USA																   #
 # Written and (c) by mru											   #
@@ -20,13 +20,13 @@
 ########################################################################
 
 
-F_OSC = 11059201L
+#F_OSC = 11059201L
 #F_OSC = 12288000L
 MCU = atmega8
 MCU_DUDE = m8
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = main.c  uart.c #portmap.c 
+SRC = main.c  uart.c adc.c ln5623.c pid.c regaccess.c #portmap.c 
 
 RELEASE_DIR = ../releases
 BUILD_ID_FILE = build-id.h
@@ -37,6 +37,8 @@ GET_DEFINES = $(CC) $(ALL_CFLAGS) -mmcu=$(MCU) -E -dM $(SRC) -Werror
 BUILD := $(shell sed -e 's/\#define BUILD_ID "\(.*\)"/\1/p;d' $(BUILD_ID_FILE))
 VERSION := $(shell sed -e 's/\#define VERSION "\(.*\)"/\1/p;d' $(VERSION_FILE))
 GET_BRANCH = $(shell git branch | sed -e 's/* \(.*\)/\1/p;d')
+
+build:
 
 br:
 	echo $(GET_BRANCH)
@@ -74,8 +76,26 @@ release: check_branch find_dummy build sizeafter
 	@echo "Released as $(RELEASE_FILENAME)"
 	@echo
 
-FUSE_L = 0xef
-FUSE_H = 0xc9
+
+# for external, 12MHz XTAL:
+#FUSE_L = 0xef  # ... 11101111
+#FUSE_H = 0xc9  # ... 11001001
+#F_OSC = 11059201L
+
+
+# for internal, calibrated 1MHz
+#FUSE_L = 0xe1   # 11100001
+#FUSE_H = 0xd9   # 11011001
+#F_OSC = 1e6
+
+
+
+# for internal, calibrated 8MHz
+FUSE_L = 0xe4   # 11100100
+FUSE_H = 0xd9   # 11011001
+F_OSC = 8e6
+
+
 
 
 #CFLAGS += -Werror

@@ -1,18 +1,18 @@
 /************************************************************************
- * This file is part of TerraControl.								    *
+ * This file is part of HeaterControl.								    *
  * 																	    *
- * TerraControl is free software; you can redistribute it and/or modify *
+ * HeaterControl is free software; you can redistribute it and/or modify *
  * it under the terms of the GNU General Public License as published    *
  * by the Free Software Foundation; either version 2 of the License, or *
  * (at your option) any later version.								    *
  * 																	    *
- * TerraControl is distributed in the hope that it will be useful,	    *
+ * HeaterControl is distributed in the hope that it will be useful,	    *
  * but WITHOUT ANY WARRANTY; without even the implied warranty of	    *
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the	    *
  * GNU General Public License for more details.						    *
  * 																	    *
  * You should have received a copy of the GNU General Public License    *
- * along with TerraControl; if not, write to the Free Software		    *
+ * along with HeaterControl; if not, write to the Free Software		    *
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 *
  * USA																    *
  * Written and (c) by mru											    *
@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include <util/delay.h>
 
 
 typedef unsigned char bool;
@@ -34,10 +35,9 @@ typedef uint32_t date_t;
 typedef uint8_t  pin_t;
 typedef volatile uint8_t* port_t;
 
-
-
 struct global_settings_t {
 };
+
 
 
 // these variables constitute the status and the setup of the
@@ -45,13 +45,10 @@ struct global_settings_t {
 // eeprom.h/eeprom.c for initialization.
 extern struct global_settings_t settings;
 
-
 struct port_pin_t {
   uint8_t po:4;
   uint8_t pi:4;
 };
-
-
 
 
 #ifndef INIT_DEBUG
@@ -73,9 +70,14 @@ struct port_pin_t {
 
 #define nop() do { asm volatile("nop"); } while (0)
 
+
+#include <stdint.h>
 // include everything from here for simplicity
 #include "uart.h"
 #include "portmap.h"
 #include "version.h"
 #include "build-id.h"
-
+#include "err.h"
+#include "adc.h"
+#include "ln5623.h"
+#include "regaccess.h"

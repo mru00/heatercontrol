@@ -1,4 +1,4 @@
-# TerraControl, mru 2009
+# HeaterControl, mru 2010
 
 DEV_SER = /dev/ttyS0
 DEV_PAR = /dev/parport0
@@ -17,14 +17,11 @@ ARCH_FILES = firmware/main.c firmware/commandline.c firmware/ds1307.c	\
 		firmware/selftest.h firmware/sht11.h firmware/time.h			\
 		firmware/timeswitch.h firmware/tmp101.h firmware/uart.h			\
 		firmware/version.h Makefile firmware/TerraControl/Makefile		\
-		firmware/Makefile pcb/Makefile pcb/TerraControl.sch				\
-		pcb/TerraControl.pcb pcb/packages/rel_finder_40_31				\
-		pcb/packages/relay-mru-1.sym
+		firmware/Makefile
 
-get_version:
-	@echo $(VERSION)
 
 build:
+	@$(MAKE) -C ~/dev/02versuche/regaccess/
 	@$(MAKE) -C firmware build
 
 program: rights
@@ -33,12 +30,16 @@ program: rights
 gui:
 	@$(MAKE) -C gui
 
+get_version:
+	@echo $(VERSION)
 
 sync:
-	unison -silent -batch -auto -ui text stepper
+	unison -silent -batch -auto -ui text dev-heater
 
-remote_program:
-	ssh ikarus 'cd ~/dev/01atmel/stepper/; make sync && make clean program; make sync;'
+remote_program: build
+	scp ~/.unison/dev-heater.prf ikarus:.unison/
+	ssh -t ikarus 'unison -silent -batch -auto -ui text dev-heater'
+	ssh -t ikarus 'cd ~/dev/01atmel/heater-control/; make sync && make clean program; make sync;'
 
 rights:
 	@if [ -e $(DEV_SER) -a ! -w $(DEV_SER) ]; then sudo chmod uog+rw $(DEV_SER); fi
