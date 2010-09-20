@@ -18,7 +18,7 @@ inline uint16_t _single_conv(void) {
 
 
 
-#if defined ( __AVR_ATmega32__)
+#if false && defined ( __AVR_ATmega32__)
 
 inline uint8_t _mux_select(uint8_t ch1, uint8_t ch2, uint8_t gain) {
 
@@ -86,7 +86,7 @@ status_t adc_select_channel(uint8_t channel) {
   return NO_ERR;
 }
 
-#if defined ( __AVR_ATmega32__)
+#if false && defined ( __AVR_ATmega32__)
 status_t adc_select_channel_diff(uint8_t ch1, uint8_t ch2, uint8_t gain) {
 
   uint8_t mux = _mux_select(ch1, ch2, gain);

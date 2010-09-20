@@ -22,8 +22,8 @@
 
 #F_OSC = 11059201L
 #F_OSC = 12288000L
-MCU = atmega8
-MCU_DUDE = m8
+MCU = atmega32
+MCU_DUDE = m32
 
 # List C source files here. (C dependencies are automatically generated.)
 SRC = main.c  uart.c adc.c ln5623.c pid.c regaccess.c #portmap.c 
@@ -98,6 +98,7 @@ F_OSC = 8e6
 
 
 
+CFLAGS += -Wall
 #CFLAGS += -Werror
 
 -include Makefile.atmel

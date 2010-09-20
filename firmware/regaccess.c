@@ -1,235 +1,346 @@
+#include <avr/eeprom.h>
 
-#include <stdint.h>
-#include <math.h>
-#include <stdio.h>
-#include <util/delay.h>
+#include "common.h"
 
-#include "uart.h"
-#include "regaccess.h"
+#define EEPROM_VALID_MASK 0xA5
 
+#define REG_OP_READ_BYTE 1
+#define REG_OP_PING 0
+#define REG_OP_READ_FLOAT 3
+#define REG_OP_WRITE_BYTE 2
+#define REG_OP_READ_SHORT 5
+#define REG_OP_WRITE_FLOAT 4
+#define REG_OP_SPECIAL 's'
+#define REG_OP_WRITE_SHORT 6
 
-#define OPCODE_READ_BYTE  ( (byte)1 )
-#define OPCODE_PING  ( (byte)0 )
-#define OPCODE_READ_FLOAT  ( (byte)3 )
-#define OPCODE_WRITE_BYTE  ( (byte)2 )
-#define OPCODE_READ_SHORT  ( (byte)5 )
-#define OPCODE_WRITE_FLOAT  ( (byte)4 )
-#define OPCODE_SPECIAL  ( (byte)'s' )
-#define OPCODE_WRITE_SHORT  ( (byte)6 )
-
-#define STATUS_FAIL  ( (byte)1 )
-#define STATUS_OK  ( (byte)0 )
-#define STATUS_NO_ACCESS  ( (byte)3 )
-#define STATUS_NO_SUCH_REGISTER  ( (byte)2 )
+#define REG_ST_FAIL  1
+#define REG_ST_OK  0
+#define REG_ST_NO_ACCESS  3
+#define REG_ST_NO_SUCH_REGISTER  2
+#define REG_ST_NOT_IMPLEMENTED  5
+#define REG_ST_INVALID_OPCODE  4
+#define REG_ST_PONG  6
 
 
 // ----------------------- file definitions
 
 volatile reg_file_t reg_file;
 
-// ----------------------- accessors
 
+// persistance of variables: eeprom layout
+
+typedef struct {
+  float pers_float_kp;
+  float pers_float_ki;
+  float pers_float_kd;
+  short pers_short_temp_ambient;
+} reg_file_persist_t;
+
+
+reg_file_persist_t reg_persist_eeprom EEMEM;
+uint8_t ee_valid_configuration EEMEM;
+
+
+extern void regfile_init(void) {
+  reg_file.reg_byte.led_on = 0;
+  reg_file.reg_float.kp = 1.0;
+  reg_file.reg_float.ki = 0.0;
+  reg_file.reg_float.kd = 0.0;
+  reg_file.reg_float.abgas_v1190 = 69.553e-3;
+  reg_file.reg_float.abgas_amp_gain = 50.0;
+  reg_file.reg_float.vorlauf_v1190 = 69.553e-3;
+  reg_file.reg_float.vorlauf_amp_gain = 50.0;
+  reg_file.reg_short.temp_vorlauf = 0;
+  reg_file.reg_short.temp_abgas = 0;
+  reg_file.reg_short.temp_ambient = 25;
+  reg_file.reg_short.controller_output = 0;
+	
+	if ( eeprom_read_byte(&ee_valid_configuration) == EEPROM_VALID_MASK) {
+	  
+	  eeprom_read_block ((void *) &reg_file.reg_float.kp, 
+						 (const void *) &reg_persist_eeprom.pers_float_kp, 
+						 sizeof(float));
+	  eeprom_read_block ((void *) &reg_file.reg_float.ki, 
+						 (const void *) &reg_persist_eeprom.pers_float_ki, 
+						 sizeof(float));
+	  eeprom_read_block ((void *) &reg_file.reg_float.kd, 
+						 (const void *) &reg_persist_eeprom.pers_float_kd, 
+						 sizeof(float));
+	  eeprom_read_block ((void *) &reg_file.reg_short.temp_ambient, 
+						 (const void *) &reg_persist_eeprom.pers_short_temp_ambient, 
+						 sizeof(short));
+	}
+	else {
+	  eeprom_write_block( (const void*) &reg_file.reg_float.kp, 
+						  &reg_persist_eeprom.pers_float_kp, 
+						  sizeof(float));
+	  eeprom_write_block( (const void*) &reg_file.reg_float.ki, 
+						  &reg_persist_eeprom.pers_float_ki, 
+						  sizeof(float));
+	  eeprom_write_block( (const void*) &reg_file.reg_float.kd, 
+						  &reg_persist_eeprom.pers_float_kd, 
+						  sizeof(float));
+	  eeprom_write_block( (const void*) &reg_file.reg_short.temp_ambient, 
+						  &reg_persist_eeprom.pers_short_temp_ambient, 
+						  sizeof(short));
+	eeprom_write_byte(&ee_valid_configuration, EEPROM_VALID_MASK);
+	}
+}
+
+
+
+// ----------------------- file accessors
+
+
+extern byte get_led_on(void) { return reg_file.reg_byte.led_on; }
+extern void  set_led_on(const byte f) {   
+  reg_file.reg_byte.led_on = f; 
+}
 
 extern float get_kp(void) { return reg_file.reg_float.kp; }
-extern void  set_kp(const float f) { reg_file.reg_float.kp = f; }
+extern void  set_kp(const float f) {   
+  reg_file.reg_float.kp = f; 
+  eeprom_write_block( (const void*) &reg_file.reg_float.kp, 
+					  &reg_persist_eeprom.pers_float_kp, 
+					  sizeof(float));  
+}
 
 extern float get_ki(void) { return reg_file.reg_float.ki; }
-extern void  set_ki(const float f) { reg_file.reg_float.ki = f; }
+extern void  set_ki(const float f) {   
+  reg_file.reg_float.ki = f; 
+  eeprom_write_block( (const void*) &reg_file.reg_float.ki, 
+					  &reg_persist_eeprom.pers_float_ki, 
+					  sizeof(float));  
+}
+
+extern float get_kd(void) { return reg_file.reg_float.kd; }
+extern void  set_kd(const float f) {   
+  reg_file.reg_float.kd = f; 
+  eeprom_write_block( (const void*) &reg_file.reg_float.kd, 
+					  &reg_persist_eeprom.pers_float_kd, 
+					  sizeof(float));  
+}
+
+extern float get_abgas_v1190(void) { return reg_file.reg_float.abgas_v1190; }
+extern void  set_abgas_v1190(const float f) {   
+  reg_file.reg_float.abgas_v1190 = f; 
+}
+
+extern float get_abgas_amp_gain(void) { return reg_file.reg_float.abgas_amp_gain; }
+extern void  set_abgas_amp_gain(const float f) {   
+  reg_file.reg_float.abgas_amp_gain = f; 
+}
+
+extern float get_vorlauf_v1190(void) { return reg_file.reg_float.vorlauf_v1190; }
+extern void  set_vorlauf_v1190(const float f) {   
+  reg_file.reg_float.vorlauf_v1190 = f; 
+}
+
+extern float get_vorlauf_amp_gain(void) { return reg_file.reg_float.vorlauf_amp_gain; }
+extern void  set_vorlauf_amp_gain(const float f) {   
+  reg_file.reg_float.vorlauf_amp_gain = f; 
+}
 
 extern short get_temp_vorlauf(void) { return reg_file.reg_short.temp_vorlauf; }
-extern void  set_temp_vorlauf(const short f) { reg_file.reg_short.temp_vorlauf = f; }
+extern void  set_temp_vorlauf(const short f) {   
+  reg_file.reg_short.temp_vorlauf = f; 
+}
 
 extern short get_temp_abgas(void) { return reg_file.reg_short.temp_abgas; }
-extern void  set_temp_abgas(const short f) { reg_file.reg_short.temp_abgas = f; }
+extern void  set_temp_abgas(const short f) {   
+  reg_file.reg_short.temp_abgas = f; 
+}
+
+extern short get_temp_ambient(void) { return reg_file.reg_short.temp_ambient; }
+extern void  set_temp_ambient(const short f) {   
+  reg_file.reg_short.temp_ambient = f; 
+  eeprom_write_block( (const void*) &reg_file.reg_short.temp_ambient, 
+					  &reg_persist_eeprom.pers_short_temp_ambient, 
+					  sizeof(short));  
+}
+
+extern short get_controller_output(void) { return reg_file.reg_short.controller_output; }
+extern void  set_controller_output(const short f) {   
+  reg_file.reg_short.controller_output = f; 
+}
+
+
+
+
+static byte read_byte_register(const byte id, byte* value)  {
+  switch(id) {
+  case 0: *value = get_led_on(); return REG_ST_OK; break;
+  }
+
+  *value = 0; 
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+static byte write_byte_register(const byte id, const byte value)  {
+  
+  switch(id) {
+  case 0: set_led_on(value); return REG_ST_OK; break;
+  }
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+
+static byte read_float_register(const byte id, float* value)  {
+  switch(id) {
+  case 0: *value = get_kp(); return REG_ST_OK; break;
+  case 1: *value = get_ki(); return REG_ST_OK; break;
+  case 2: *value = get_kd(); return REG_ST_OK; break;
+  case 3: *value = get_abgas_v1190(); return REG_ST_OK; break;
+  case 4: *value = get_abgas_amp_gain(); return REG_ST_OK; break;
+  case 5: *value = get_vorlauf_v1190(); return REG_ST_OK; break;
+  case 6: *value = get_vorlauf_amp_gain(); return REG_ST_OK; break;
+  }
+
+  *value = 0; 
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+static byte write_float_register(const byte id, const float value)  {
+  
+  switch(id) {
+  case 0: set_kp(value); return REG_ST_OK; break;
+  case 1: set_ki(value); return REG_ST_OK; break;
+  case 2: set_kd(value); return REG_ST_OK; break;
+  case 3: set_abgas_v1190(value); return REG_ST_OK; break;
+  case 4: set_abgas_amp_gain(value); return REG_ST_OK; break;
+  case 5: set_vorlauf_v1190(value); return REG_ST_OK; break;
+  case 6: set_vorlauf_amp_gain(value); return REG_ST_OK; break;
+  }
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+
+static byte read_short_register(const byte id, short* value)  {
+  switch(id) {
+  case 0: *value = get_temp_vorlauf(); return REG_ST_OK; break;
+  case 1: *value = get_temp_abgas(); return REG_ST_OK; break;
+  case 2: *value = get_temp_ambient(); return REG_ST_OK; break;
+  case 3: *value = get_controller_output(); return REG_ST_OK; break;
+  }
+
+  *value = 0; 
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+static byte write_short_register(const byte id, const short value)  {
+  
+  switch(id) {
+  case 0: return REG_ST_NO_ACCESS; break;
+  case 1: return REG_ST_NO_ACCESS; break;
+  case 2: return REG_ST_NO_ACCESS; break;
+  case 3: return REG_ST_NO_ACCESS; break;
+  }
+  return REG_ST_NO_SUCH_REGISTER;
+}
+
+
 
 
 // ----------------------- serial comm accessors
 
 
-static int read_byte_register(int id, byte* value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  default: *value = 0xa5; return STATUS_FAIL;
-  }
-#else
-  *value = *(  ((byte*)&(reg_file.reg_byte)) + id);
-  return 0;
-#endif
-}
-
-static int write_byte_register(int id, const byte value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  default: return STATUS_FAIL;
-  }
-#else
-  *( ((byte*)(&reg_file.reg_byte)) + id) = value;
-  return 0;
-#endif
-}
-
-
-static int read_float_register(int id, float* value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  case 0: *value = reg_file.reg_float.kp; return STATUS_OK; break;
-  case 1: *value = reg_file.reg_float.ki; return STATUS_OK; break;
-  default: *value = 0xa5; return STATUS_FAIL;
-  }
-#else
-  *value = *(  ((float*)&(reg_file.reg_float)) + id);
-  return 0;
-#endif
-}
-
-static int write_float_register(int id, const float value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  case 1: reg_file.reg_float.ki = value; return STATUS_OK; break;
-  case 0: return STATUS_NO_ACCESS; break;
-  default: return STATUS_FAIL;
-  }
-#else
-  *( ((float*)(&reg_file.reg_float)) + id) = value;
-  return 0;
-#endif
-}
-
-
-static int read_short_register(int id, short* value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  case 0: *value = reg_file.reg_short.temp_vorlauf; return STATUS_OK; break;
-  case 1: *value = reg_file.reg_short.temp_abgas; return STATUS_OK; break;
-  default: *value = 0xa5; return STATUS_FAIL;
-  }
-#else
-  *value = *(  ((short*)&(reg_file.reg_short)) + id);
-  return 0;
-#endif
-}
-
-static int write_short_register(int id, const short value)  {
-#ifdef REG_EXPLICIT_ACCESS
-  switch(id) {
-  case 0: return STATUS_NO_ACCESS; break;
-  case 1: return STATUS_NO_ACCESS; break;
-  default: return STATUS_FAIL;
-  }
-#else
-  *( ((short*)(&reg_file.reg_short)) + id) = value;
-  return 0;
-#endif
-}
-
-
 static byte receive_byte(void) {
   unsigned int v;
-  while ( (v=uart_getc()) & UART_NO_DATA ) ;
+  while ( (v=uart_getc()) & UART_NO_DATA );
   return (byte) v&0xff;
 }
 
 static float receive_float(void) {
-  char b[4];
-  unsigned int v, i;
-  for (i = 0; i < 4; i ++ ) {
-	while ( (v=uart_getc()) & UART_NO_DATA ) ;
-	b[i] = (byte) v&0xff;
-  }
-  return *( (float*) b );
+  union {
+	char b[4];
+	float f;
+  } v;
+
+  v.b[0] = receive_byte();
+  v.b[1] = receive_byte();
+  v.b[2] = receive_byte();
+  v.b[3] = receive_byte();
+  return v.f;
 }
 
 static short receive_short(void) {
   char b[2];
-  unsigned int v, i;
+  unsigned int i;
   for (i = 0; i < 2; i ++ ) {
-	while ( (v=uart_getc()) & UART_NO_DATA ) ;
-	b[i] = (byte) v&0xff;
+	b[i] = receive_byte();
   }
   return *( (short*) b );
 }
 
-
-static void send_byte(byte value) {
+static void send_byte(const byte value) {
   uart_putc(value);
 }
 
-static void send_float(float value) {
-  unsigned int i;
-  for (i = 0; i < 4; i ++ ) {
-	uart_putc( ( (byte*)&value) [i] );
-  }
+static void send_float(const float value) {
+  union {
+	char b[4];
+	float f;
+  } v;
+  v.f = value;
+
+  send_byte( v.b[0] );
+  send_byte( v.b[1] );
+  send_byte( v.b[2] );
+  send_byte( v.b[3] );
 }
 
-static void send_short(short value) {
-  unsigned int i;
-  for (i = 0; i < 2; i ++ ) {
-	uart_putc( ( (byte*)&value) [i] );
-  }
+static void send_short(const short value) {
+  send_byte( ( (byte*)&value) [0] );
+  send_byte( ( (byte*)&value) [1] );
 }
 
-extern void receive(char ch) {
-  int id, status;
+extern void receive_reg(const uint8_t ch) {
+
+  byte id = 0;
+  byte status = 0;
   union {
 	float f;
 	byte b;
 	short s;
   } v;
 
-
-  uart_puts("received:");
-  _delay_ms(100);
-  uart_putc(ch);
-  uart_putc(OPCODE_PING);
-
-
-  switch (ch) {
-  case OPCODE_PING: 
-	uart_putc(0);
-	break;
-  case OPCODE_READ_BYTE:
+  if ( REG_OP_PING == ch ) {
+	uart_putc(REG_ST_PONG);
+  } else if ( REG_OP_READ_BYTE == ch ) {
 	id = receive_byte();
 	status = read_byte_register(id, &v.b);
 	uart_putc(status);
 	send_byte(v.b);
-	break;
-  case OPCODE_WRITE_BYTE:
+  } else if (REG_OP_WRITE_BYTE == ch) {
 	id = receive_byte();
 	v.b = receive_byte();
 	status = write_byte_register(id, v.b);
 	uart_putc(status);
-	break;
-  case OPCODE_READ_FLOAT:
-	id = receive_float();
+  } else if (ch == REG_OP_READ_FLOAT) {
+	id = receive_byte();
 	status = read_float_register(id, &v.f);
 	uart_putc(status);
 	send_float(v.f);
-	break;
-  case OPCODE_WRITE_FLOAT:
+  } else if (ch == REG_OP_WRITE_FLOAT) {
 	id = receive_byte();
 	v.f = receive_float();
 	status = write_float_register(id, v.f);
 	uart_putc(status);
-	break;
-  case OPCODE_READ_SHORT:
+  } else if (ch == REG_OP_READ_SHORT) {
 	id = receive_byte();
 	read_short_register(id, &v.s);
 	uart_putc(status);
 	send_short(v.s);
-	break;
-  case OPCODE_WRITE_SHORT:
+  } else if (ch == REG_OP_WRITE_SHORT) {
 	id = receive_byte();
-	v.f = receive_short();
+	v.s = receive_short();
 	status = write_short_register(id, v.s);
 	uart_putc(status);
-	break;
-  case OPCODE_SPECIAL:
-	uart_putc(1);
-	break;
-  default:
-	uart_putc(1);
+  } else if (ch == REG_OP_SPECIAL) {
+	uart_putc(REG_ST_NOT_IMPLEMENTED);
+  }  else{
+	uart_putc(REG_ST_INVALID_OPCODE);
   }
-
 }
 
 

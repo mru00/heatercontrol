@@ -25,14 +25,12 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 #include <avr/pgmspace.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include "pid.h"
 
 #include "common.h"
 
 #define UART_BAUD_RATE     38400
-
 static void __attribute__((constructor))
 uart_constructor(void) {
   uart_init(UART_BAUD_SELECT(UART_BAUD_RATE,XTAL));
@@ -45,48 +43,20 @@ uart_constructor(void) {
 
 static struct PID_DATA pidData;
 
-static const float fir_temp_coeffs[] = { 1./12., 1./12., 1./12.,
-										 1./12., 1./12., 1./12.,
-										 1./12., 1./12., 1./12.,
-										 1./12., 1./12., 1./12.};
-
-static float fir_push(const float xn,
-					  float *buffer,
-					  int *pos,
-                     const float *coeff,
-                     const int count)
-{
-  float yn = 0.0f;
-  int i =0;
-
-  *pos = (*pos + 1) % count;
-  *(buffer + *pos) = xn;
-  for (i = 0; i < count; i++) 
-	yn += *(buffer+((i+*pos)%count)) * *(coeff + ((i+*pos)%count));
-  return yn;
-}
-
-
 
 #define uchar unsigned char
 #define uint unsigned int
-
-static float last_temp_abgas[12];
-static float last_temp_vorlauf[12];
-static int temp_abgas_pos=0;
-static int temp_vorlauf_pos=0;
-
 
 static float calc_temp_abgas(uint16_t ambient_temp) {
   uint16_t adc_value;
   float volt;
   float temp;
 
-  const float v_1190_deg = 69.553e-3;
+  const float v_1190_deg = get_abgas_v1190();
   const float v_0_deg = 0.0;
   const float k = (1190.0-0.0)/(v_1190_deg-v_0_deg);
 
-  const float amp_gain = 50.0;
+  const float amp_gain = get_abgas_amp_gain();
 
   adc_select_channel(0);
   adc_single_conversion(&adc_value);
@@ -96,7 +66,7 @@ static float calc_temp_abgas(uint16_t ambient_temp) {
   temp /= amp_gain;
   temp += ambient_temp;
 
-  return fir_push(temp, last_temp_abgas, &temp_abgas_pos, fir_temp_coeffs, 12);
+  return temp;
 }
 
 
@@ -105,11 +75,11 @@ static float calc_temp_vorlauf(uint16_t ambient_temp) {
   float volt;
   float temp;
 
-  const float v_1190_deg = 69.553e-3;
+  const float v_1190_deg = get_vorlauf_v1190();
   const float v_0_deg = 0.0;
   const float k = (1190.0-0.0)/(v_1190_deg-v_0_deg);
 
-  const float amp_gain = 50.0;
+  const float amp_gain = get_vorlauf_amp_gain();
 
   adc_select_channel(1);
   adc_single_conversion(&adc_value);
@@ -119,13 +89,11 @@ static float calc_temp_vorlauf(uint16_t ambient_temp) {
   temp /= amp_gain;
   temp += ambient_temp;
 
-  return fir_push(temp, last_temp_vorlauf, &temp_vorlauf_pos, fir_temp_coeffs, 12);
+  return temp;
 }
 
 int main(void)
 {
-  char str_val[100];
-
   _delay_ms(100);
 
   // init section -------------------------------------
@@ -139,36 +107,52 @@ int main(void)
 
   DDRB = 0x07;
 
+
+
+
+  regfile_init();
   uart_puts("hello from heater-control\n");
   adc_init();
   ln5623_init();
-  pid_init(K_P * SCALING_FACTOR, 
-		   K_I * SCALING_FACTOR, 
-		   K_D * SCALING_FACTOR, 
-		   &pidData);
+  pid_init(K_P * SCALING_FACTOR,
+  		   K_I * SCALING_FACTOR,
+  		   K_D * SCALING_FACTOR,
+  		   &pidData);
   
   sei();
   /* main loop section ---------------------------------- */
+
+  // led1, led2 und piepser sind outputs
+  DDRD  |= _BV(PD5) | _BV(PD6);
+  PORTD |= _BV(PD5) | _BV(PD6);
 
   for(;;) {
 	unsigned int recv = uart_getc();
 
 	if ( (recv & UART_NO_DATA) == 0  ) {
-	  receive(recv & 0xff);
+	  receive_reg(recv & 0xff);
 	}
 
-	const uint16_t ambient_temp = 25;
-    uint16_t temp_vorlauf = (int)calc_temp_vorlauf(ambient_temp);
-    uint16_t temp_abgas = (int)calc_temp_abgas(ambient_temp);
+	if ( get_led_on() ) {
+	  PORTD &= ~ _BV(PD5);
+	  PORTD |=   _BV(PD6);
+	}
+	else {
+	  PORTD |=  _BV(PD5);	  
+	  PORTD &= ~_BV(PD6);
+	}
+
+    uint16_t temp_vorlauf = (int)calc_temp_vorlauf(get_temp_ambient());
+    uint16_t temp_abgas = (int)calc_temp_abgas(get_temp_ambient());
 
 	int16_t inputValue = pid_controller(temp_vorlauf, 80, &pidData);
 
-    set_temp_vorlauf(temp_vorlauf);
-    set_temp_abgas(temp_abgas);
-
+	// update register file
+	set_temp_vorlauf(temp_vorlauf);
+	set_temp_abgas(temp_abgas);
+	set_controller_output(inputValue);
 
     ln5623_set_output(temp_vorlauf, 0);
-    _delay_ms(50);
   }
 }
 

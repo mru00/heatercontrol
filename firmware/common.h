@@ -28,12 +28,11 @@
 
 #pragma once
 #include <util/delay.h>
+#include <stdint.h>
 
 
 typedef unsigned char bool;
 typedef uint32_t date_t;
-typedef uint8_t  pin_t;
-typedef volatile uint8_t* port_t;
 
 struct global_settings_t {
 };
@@ -44,12 +43,6 @@ struct global_settings_t {
 // controller. some are also persisted into eeprom, see
 // eeprom.h/eeprom.c for initialization.
 extern struct global_settings_t settings;
-
-struct port_pin_t {
-  uint8_t po:4;
-  uint8_t pi:4;
-};
-
 
 #ifndef INIT_DEBUG
 #  define LOG_INIT()
@@ -71,10 +64,8 @@ struct port_pin_t {
 #define nop() do { asm volatile("nop"); } while (0)
 
 
-#include <stdint.h>
 // include everything from here for simplicity
 #include "uart.h"
-#include "portmap.h"
 #include "version.h"
 #include "build-id.h"
 #include "err.h"
