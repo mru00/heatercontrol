@@ -30,7 +30,7 @@
 
 #include "common.h"
 
-#define UART_BAUD_RATE     38400
+#define UART_BAUD_RATE  38400
 static void __attribute__((constructor))
 uart_constructor(void) {
   uart_init(UART_BAUD_SELECT(UART_BAUD_RATE,XTAL));
@@ -108,9 +108,6 @@ int main(void)
   DDRB = 0x07;
 
 
-
-
-  regfile_init();
   uart_puts("hello from heater-control\n");
   adc_init();
   ln5623_init();
@@ -122,7 +119,6 @@ int main(void)
   sei();
   /* main loop section ---------------------------------- */
 
-  // led1, led2 und piepser sind outputs
   DDRD  |= _BV(PD5) | _BV(PD6);
   PORTD |= _BV(PD5) | _BV(PD6);
 
@@ -130,17 +126,9 @@ int main(void)
 	unsigned int recv = uart_getc();
 
 	if ( (recv & UART_NO_DATA) == 0  ) {
-	  receive_reg(recv & 0xff);
+	  on_receive_byte(recv & 0xff);
 	}
 
-	if ( get_led_on() ) {
-	  PORTD &= ~ _BV(PD5);
-	  PORTD |=   _BV(PD6);
-	}
-	else {
-	  PORTD |=  _BV(PD5);	  
-	  PORTD &= ~_BV(PD6);
-	}
 
     uint16_t temp_vorlauf = (int)calc_temp_vorlauf(get_temp_ambient());
     uint16_t temp_abgas = (int)calc_temp_abgas(get_temp_ambient());
@@ -154,6 +142,18 @@ int main(void)
 
     ln5623_set_output(temp_vorlauf, 0);
   }
+}
+
+byte set_led(byte on) { 
+  if ( on ) {
+	PORTD &= ~ _BV(PD5);
+	PORTD |=   _BV(PD6);
+  }
+  else {
+	PORTD |=  _BV(PD5);	  
+	PORTD &= ~_BV(PD6);
+  }
+  return 0; 
 }
 
 

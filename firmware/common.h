@@ -29,6 +29,7 @@
 #pragma once
 #include <util/delay.h>
 #include <stdint.h>
+#include <math.h>
 
 
 typedef unsigned char bool;

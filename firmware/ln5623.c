@@ -93,7 +93,7 @@ ISR(TIMER1_COMPA_vect) {
   }
 }
 
-extern void ln5623_set_output(uint16_t value,
+extern uint8_t ln5623_set_output(uint16_t value,
 							  uint8_t dp)
 {
   if ( value > 999 ) {
@@ -105,6 +105,8 @@ extern void ln5623_set_output(uint16_t value,
   display_data.value[1] = (value-100*display_data.value[2])/10;
   display_data.value[0] = (value-10*display_data.value[1]-100*display_data.value[2]);
   display_data.dp = dp;
+
+  return 0;
 }
 
 extern void ln5623_clear_output(void) 

@@ -9,7 +9,7 @@
 
 extern void ln5623_init(void);
 
-extern void ln5623_set_output(uint16_t value, 
+extern uint8_t ln5623_set_output(uint16_t value, 
 							  uint8_t dp);
 
 extern void ln5623_clear_output(void);

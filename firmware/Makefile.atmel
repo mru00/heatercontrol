@@ -400,14 +400,15 @@ extcoff: $(TARGET).elf
 	$(NM) -n $< > $@
 
 
+# mru hacked: single-call compile!
 
 # Link: create ELF output file from object files.
 .SECONDARY : $(TARGET).elf
 .PRECIOUS : $(OBJ)
-%.elf: $(OBJ)
+%.elf: $(OBJ:.o=.c)
 	@echo
-	@echo $(MSG_LINKING) $@
-	$(CC) $(ALL_CFLAGS) $(OBJ) --output $@ $(LDFLAGS)
+	@echo //mru: compile all// $(MSG_LINKING) $@
+	$(CC) $(ALL_CFLAGS) $(OBJ:.o=.c) --output $@ $(LDFLAGS)
 
 
 # Compile: create object files from C source files.
